@@ -5,39 +5,53 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 	"text/template"
 
+	"github.com/helmfile/helmfile/pkg/filesystem"
+	"github.com/helmfile/helmfile/pkg/tmpl"
 	"github.com/spf13/cobra"
 )
 
 var (
-	params      map[string]string
-	templateStr string
+	params           map[string]string
+	templateFilePath string
 )
 
 // renderCmd represents the render command
 var renderCmd = &cobra.Command{
 	Use:   "render",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Render a template",
+	Long:  `Render a template`,
 	Run: func(cmd *cobra.Command, args []string) {
-		tmpl := templateStr
+		path, err := filepath.Abs(templateFilePath)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if _, err := os.Stat(path); err != nil {
+			log.Fatal(err)
+		}
 
 		data := make(map[string]interface{})
 		for k, v := range params {
 			data[k] = v
 		}
 
-		t, err := template.New("mytemplate").Parse(tmpl)
+		c := &tmpl.Context{}
+		c.SetBasePath(".")
+		c.SetFileSystem(filesystem.DefaultFileSystem())
+
+		// register helmfile custom functions
+		t := template.New(filepath.Base(path)).Funcs(c.CreateFuncMap())
+
+		t, err = t.ParseFiles(path)
+
 		if err != nil {
-			fmt.Println("Failed to parse template:", err)
-			return
+			log.Fatal(err)
 		}
 
 		err = t.Execute(os.Stdout, data)
@@ -53,7 +67,7 @@ func init() {
 
 	renderCmd.Flags().StringToStringVarP(&params, "param", "p", nil, "Template parameters")
 
-	renderCmd.Flags().StringVarP(&templateStr, "template", "t", "", "Template")
+	renderCmd.Flags().StringVarP(&templateFilePath, "file", "f", "", "File to render")
 
 	// Here you will define your flags and configuration settings.
 
